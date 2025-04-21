@@ -1,0 +1,87 @@
+<launch>
+  <arg name="model" default="$(env TURTLEBOT3_MODEL)" doc="model type [burger, waffle, waffle_pi]"/>
+  <arg name="open_rviz" default="true"/>
+  <arg name="map_file" default="$(find turtlebot3_navigation)/maps/map.yaml"/>
+
+  <arg name="first_tb3"  default="robot1"/>
+  <arg name="second_tb3" default="robot2"/>
+  <arg name="third_tb3"  default="robot3"/>
+
+  <arg name="first_tb3_x_pos" default="0.0"/>
+  <arg name="first_tb3_y_pos" default="-0.5"/>
+  <arg name="first_tb3_z_pos" default=" 0.0"/>
+  <arg name="first_tb3_yaw"   default=" 0.0"/>
+
+  <arg name="second_tb3_x_pos" default=" 7.0"/>
+  <arg name="second_tb3_y_pos" default="-1.0"/>
+  <arg name="second_tb3_z_pos" default=" 0.0"/>
+  <arg name="second_tb3_yaw"   default=" 1.57"/>
+
+  <arg name="third_tb3_x_pos" default=" 0.5"/>
+  <arg name="third_tb3_y_pos" default=" 3.0"/>
+  <arg name="third_tb3_z_pos" default=" 0.0"/>
+  <arg name="third_tb3_yaw"   default=" 0.0"/>
+
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <arg name="world_name" value="$(find turtlebot3_gazebo)/worlds/turtlebot3_world.world"/>
+    <arg name="paused" value="false"/>
+    <arg name="use_sim_time" value="true"/>
+    <arg name="gui" value="true"/>
+    <arg name="headless" value="false"/>
+    <arg name="debug" value="false"/>
+  </include>  
+
+
+  <group ns = "$(arg first_tb3)">
+    <param name="robot_description" command="$(find xacro)/xacro --inorder $(find turtlebot3_description)/urdf/turtlebot3_$(arg model).urdf.xacro" />
+
+    <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher" output="screen">
+      <param name="publish_frequency" type="double" value="50.0" />
+      <param name="tf_prefix" value="$(arg first_tb3)" />
+    </node>
+    
+    <node name="spawn_urdf" pkg="gazebo_ros" type="spawn_model" args="-urdf -model $(arg first_tb3) -x $(arg first_tb3_x_pos) -y $(arg first_tb3_y_pos) -z $(arg first_tb3_z_pos) -Y $(arg first_tb3_yaw) -param robot_description" />
+
+    <!-- Map server -->
+    <node name="map_server" pkg="map_server" type="map_server"
+          args="$(find turtlebot3_navigation)/maps/map.yaml">
+      <param name="frame_id" value="$(arg first_tb3)/map"/>
+    </node>
+
+
+    <node pkg="turtlebot3_fake" type="turtlebot3_fake_node" name="turtlebot3_fake_node" output="screen">
+    </node>
+    <!-- AMCL -->
+    <!-- <node pkg="amcl" type="amcl" name="amcl" output="screen">
+      <param name="odom_frame_id" value="$(arg first_tb3)/odom"/>
+      <param name="base_frame_id" value="$(arg first_tb3)/base_footprint"/>
+      <param name="global_frame_id" value="$(arg first_tb3)/map"/>
+      <remap from="scan" to="/$(arg first_tb3)/scan"/>
+    </node> -->
+      <!-- static map -> odom -->
+    <node pkg="tf" type="static_transform_publisher" name="static_map_to_odom" 
+          args="0 0.5 0 0 0 0 $(arg first_tb3)/map $(arg first_tb3)/odom 10"/>
+    <node pkg="tf" type="static_transform_publisher" name="static_map_to_map" 
+          args="0 0 0 0 0 0 map $(arg first_tb3)/map 10"/> 
+
+    <!-- move_base -->
+    <node pkg="move_base" type="move_base" respawn="false" name="move_base" output="screen">
+      <param name="base_local_planner" value="dwa_local_planner/DWAPlannerROS" />
+      <rosparam file="$(find robot_setup)/config/costmap_common_params.yaml" command="load" ns="global_costmap" />
+      <rosparam file="$(find robot_setup)/config/costmap_common_params.yaml" command="load" ns="local_costmap" />
+      <rosparam file="$(find robot_setup)/config/local_costmap_params.yaml" command="load" />
+      <rosparam file="$(find robot_setup)/config/global_costmap_params.yaml" command="load" />
+      <rosparam file="$(find robot_setup)/config/move_base_params.yaml" command="load" />
+      <rosparam file="$(find robot_setup)/config/dwa_local_planner_params.yaml" command="load" />
+      <remap from="cmd_vel" to="/$(arg first_tb3)/cmd_vel"/>
+      <remap from="odom" to="/$(arg first_tb3)/odom"/>
+    </node>
+  </group>
+
+    <!-- RViz -->
+  <group if="$(arg open_rviz)"> 
+    <node pkg="rviz" type="rviz" name="rviz" required="true"
+          args="-d $(find robot_setup)/config/multirobot.rviz"/>
+  </group>
+
+</launch>
